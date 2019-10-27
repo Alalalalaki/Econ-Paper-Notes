@@ -11,3 +11,6 @@ Thumbs.db
 
 # Ipython files
 .ipynb_checkpoints
+
+# reference
+*ref/
