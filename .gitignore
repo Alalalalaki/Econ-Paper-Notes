@@ -15,5 +15,5 @@ Thumbs.db
 # reference
 *ref/
 
-# data
-data/
+# binary files
+*.xls
