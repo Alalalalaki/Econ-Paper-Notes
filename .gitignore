@@ -16,4 +16,4 @@ Thumbs.db
 *ref/
 
 # data
-data/
+*.xls
