@@ -13,7 +13,7 @@ Thumbs.db
 .ipynb_checkpoints
 
 # reference
-*ref/
+*reference/
 
 # binary files
 *.xls
