@@ -1,5 +1,7 @@
 # Econ-Model-Notes
 
+---
+
 ## Macro
 
 - Solow
@@ -10,6 +12,8 @@
 #### To-do
 
 - rewrite Hopenhayn model and add adjustment cost
+
+---
 
 ### IO
 
