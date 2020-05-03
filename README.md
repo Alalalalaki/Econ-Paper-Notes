@@ -9,7 +9,7 @@
 - İmrohoroğlu, et al. 2006. The Japanese Saving Rate. (Hayashi & Prescott tyle)
 - İmrohoroğlu, 1989, JPE.
 
-#### To-do
+#### TO-DO
 
 - rewrite Hopenhayn model and add adjustment cost
 
@@ -19,7 +19,7 @@
 
 - 
 
-#### To-do
+#### TO-DO
 
 - a simplified version of BLP
 - OP/LP/ACF
