@@ -15,5 +15,8 @@ Thumbs.db
 # reference
 *reference/
 
+# notebook under progress
+*progress.ipynb
+
 # binary files
 *.xls
