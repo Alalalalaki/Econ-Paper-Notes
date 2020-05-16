@@ -4,10 +4,11 @@
 
 ## Macro
 
-- Solow
-- Hopenhayn (partial equilibrium)
+- Solow.
+- Hopenhayn 1992. (partial equilibrium)
 - İmrohoroğlu, et al. 2006. The Japanese Saving Rate. (Hayashi & Prescott tyle)
 - İmrohoroğlu, 1989, JPE.
+- Restuccia & Rogerson 2008.
 
 #### TO-DO
 
