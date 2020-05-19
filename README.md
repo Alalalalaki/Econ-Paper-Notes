@@ -13,7 +13,7 @@
 #### TO-DO
 
 - rewrite Hopenhayn model and add adjustment cost
-- improve the documenting and commenting in Japanese Saving Rate
+- ~~rewrite code in Japanese Saving Rate~~
 
 ---
 
