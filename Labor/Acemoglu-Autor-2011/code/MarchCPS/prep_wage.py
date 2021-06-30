@@ -46,8 +46,8 @@ def tabulate_march_basic(year):
     df = df.query("selfemp == 0")
 
     # @ ?
-    assert df.loc[df.winc_ws.isna(), "hinc_ws"].isna().value_counts().all()
-    assert df.loc[df.hinc_ws.isna(), "winc_ws"].isna().value_counts().all()
+    assert df.loc[df.winc_ws.isna(), "hinc_ws"].isna().all(), print(year)
+    assert df.loc[df.hinc_ws.isna(), "winc_ws"].isna().all(), print(year)
     df = df.query("winc_ws == winc_ws")  # @ this drop not in tab-march-ineq, but same result
 
     # Drop allocators? Yes
@@ -55,10 +55,11 @@ def tabulate_march_basic(year):
 
     # Create consistent education categories
     if year <= 1991:
-        # gen byte educomp= max(0,_grdhi-(grdcom==2))
-        # tab educomp
+        assert df._grdhi.isna().sum() == 0  # @ see both tab-march-ineq.do & prepmarchcell.do
         assert df.eval("0 <= educomp <= 18").all()
         df.grdcom = df.grdcom.cat.codes + 1  # @ to be consistent with stat
+        df.grdcom = df.grdcom.replace(3, 1) # @ turn 3 to 1 in some years
+        assert df.eval("1 <= grdcom <= 2").all()
         df = df.eval("""
                 ed8 = educomp<=8
                 ed9  = educomp==9
@@ -175,9 +176,9 @@ def tabulate_march_inequality(year):
 
     df = df.filter(["year", "wgt", "wgt_hrs", "female", "lnwinc", "lnhinc", "hrsamp", "ftsamp", "edcat", "expcat"])
 
-    ###############################################################
+    ######################################################################
     # Summarize raw inequality
-    ###############################################################
+    ######################################################################
 
     pctiles = pd.Series([3, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 97])
     pctiles_ = pctiles / 100
@@ -216,9 +217,9 @@ def tabulate_march_inequality(year):
 
     df_stat = pd.concat([tot_stat, tot_pct], axis=0, sort=False)
 
-    ###############################################################
+    ######################################################################
     # Summarize residual inequality - Weekly & Hourly
-    ###############################################################
+    ######################################################################
 
     res_pct = pd.DataFrame(index=pctiles)
     res_stat = pd.DataFrame(index=["mn", "vln"])
@@ -283,9 +284,9 @@ def tabulate_march_inequality(year):
     # march-ineq-data-`1'
     df_stat = df_stat.T.rename_axis('sample').reset_index().assign(year=year)  # @ tidy data
 
-    ###############################################################
+    ######################################################################
     # Percentiles of weekly earnings
-    ###############################################################
+    ######################################################################
 
     # @ simply generate more percentiles under full-time samples
     # @ note here year is march census year thus minus one to be earnings year
@@ -460,9 +461,9 @@ def predict_archwg_regs_exp(year):
     df.tcwkwg = 0
     df.tchrwg = 0
 
-    ###############################################################
+    ######################################################################
     # Predict wages -- Weekly, Using Only Obs With $67/Week Or More
-    ###############################################################
+    ######################################################################
 
     # Male regression
     dt = df.query("ftfy==1 & female==0 & tcwkwg==0 & bcwkwgkm==0")
@@ -483,17 +484,18 @@ def predict_archwg_regs_exp(year):
     edcol = ["edhsd", "edhsg", "edsmc", "edclg", "edgtc"]
     expcat = range(5, 46, 10)
     expcol = [f"exp{i}" for i in expcat]
-    s = pd.DataFrame(0, index=pd.MultiIndex.from_product([edcol, expcol]), columns=X_)
+    s = pd.DataFrame(0, index=pd.MultiIndex.from_product([edcol, expcol]), columns=X_+["edhsg"])
     for ed in edcat:
         n = edcol[ed]
-        if n != "edhsg":
-            s.loc[n, n] = 1
+        # if n != "edhsg":
+        s.loc[n, n] = 1
     s = s.swaplevel()
     for i, exp in enumerate(expcat):
         n = expcol[i]
         s.loc[n, "exp1"] = exp
-    X_cf = sm.add_constant(prod_exp_edu_interactions(s))
-    marchwk_ed_exp_m = res.predict(X_cf)  # @ tidy dataframe for marchwk-`ed'-exp`exp'-m
+    X_cf = s.drop("edhsg", axis=1)
+    X_cf = sm.add_constant(prod_exp_edu_interactions(X_cf))
+    marchwk_ed_exp_m = res.predict(X_cf)  # @ marchwk-`ed'-exp`exp'-m
 
     # Female regression
     dt = df.query("ftfy==1 & female==1 & tcwkwg==0 & bcwkwgkm==0")
@@ -503,7 +505,7 @@ def predict_archwg_regs_exp(year):
 
     # Predict values
     # Now conduct 25 predictions based upon the the 5 education and 5 experience categories
-    marchwk_ed_exp_f = res.predict(X_cf)  # @ tidy dataframe for marchwk-`ed'-exp`exp'-f
+    marchwk_ed_exp_f = res.predict(X_cf)  # @ marchwk-`ed'-exp`exp'-f
 
     # Compile all male/female predicted weekly wages
     pwkwageskm = s.assign(plnwkw_m=marchwk_ed_exp_m, plnwkw_f=marchwk_ed_exp_f)
@@ -512,11 +514,55 @@ def predict_archwg_regs_exp(year):
     pwkwageskm = pwkwageskm.eval("edcat = edhsd + 2*edhsg + 3*edsmc + 4*edclg + 5*edgtc")
     assert pwkwageskm.eval("1 <= edcat <= 5").all()
 
-    ###############################################################
-    # Predict hourly wages --  Using Only Obs With $67/Week Or More
-    ###############################################################
+    pwkwageskm = pwkwageskm.filter(["plnwkw_m", "plnwkw_f", "edcat", "exp1"])  # @ gdp
 
-    return pwkwageskm
+    ######################################################################
+    # Predict hourly wages --  Using Only Obs With $67/Week Or More
+    ######################################################################
+
+    # Male regression
+    dt = df.query("female==0 & tchrwg==0 & bchrwgkm==0")
+    X_ = X_ + ["pt"]
+    y, X = dt.lnhinc, dt[X_]
+    X = sm.add_constant(X)
+    wgt = dt.wgt * dt._wkslyr.astype(float)
+    res = sm.WLS(y, X, weights=wgt).fit()
+
+    # Predict values
+    X_cf = X_cf.assign(pt=0)
+    marchhr_ed_exp_m = res.predict(X_cf)  # @ marchhr-`ed'-exp`exp'-m
+
+    # Female regression
+    dt = df.query("female==1 & tcwkwg==0 & bcwkwgkm==0")
+    y, X = dt.lnhinc, dt[X_]
+    X = sm.add_constant(X)
+    wgt = dt.wgt * dt._wkslyr.astype(float)
+    res = sm.WLS(y, X, weights=wgt).fit()
+
+    # Predict values
+    marchhr_ed_exp_f = res.predict(X_cf)  # @ marchhr-`ed'-exp`exp'-f
+
+    # @ data : Predicted wk & hr wages, March `1'
+    predwg = pwkwageskm.assign(plnhrw_m=marchhr_ed_exp_m, plnhrw_f=marchhr_ed_exp_f)
+
+    # @ gdp : "PCE deflator: 2008 basis"
+    gdp = df.gdp.unique()
+    assert len(gdp) == 1
+    predwg = predwg.assign(gdp=gdp[0])
+    # @ year : Earnings year
+    predwg = predwg.assign(year=year-1)  # @ predwg-mar`1'
+
+    return predwg
+
+
+def predict_archwg_regs_exp_loop():
+
+    predwg = pd.DataFrame()
+    for y in tqdm(range(1964, 2010)):
+        predwg_ = predict_archwg_regs_exp(year=y)
+        predwg = pd.concat([predwg, predwg_], axis=0)
+
+    return predwg
 
 
 """
@@ -524,9 +570,34 @@ assemb-march-lswts-exp.do
 """
 
 
+def assemb_march_lswts_exp():
+    """
+    #
+    Assemble labor supply weights for March data
+
+    Updated 10/9/2006 D. Autor for March 2006 data
+    Updated 10/2009 M. Wasserman for March 2008/9 data
+    #
+    """
+
+
 """
 assemb-marchwg-regs-exp.do
 """
+
+
+def assemb_marchwg_regs_exp():
+    """
+     #
+     Assemble march predicted wage data
+
+     Autor, 6/20/03, 6/12/04, 9/4/2006
+     Wasserman 10/2009
+     #
+     """
+    predwg = predict_archwg_regs_exp_loop()
+
+    predwg = predwg.assign(expcat=(predwg.exp1 / 5).astype(int))
 
 
 """
@@ -537,6 +608,7 @@ calc-marchwg-byexp.do
 def main():
     # tabulate_march_inequality(1997)
     print(tabulate_march_inequality_loop())
+    # print(predict_archwg_regs_exp_loop())
     pass
 
 
