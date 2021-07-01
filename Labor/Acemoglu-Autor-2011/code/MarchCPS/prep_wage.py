@@ -14,6 +14,8 @@ from patsy import dmatrices
 
 from tqdm import tqdm
 
+import prep_supply
+
 input_path = "../../ref/origin/March-CPS/cleaned-data/"
 
 
@@ -58,7 +60,7 @@ def tabulate_march_basic(year):
         assert df._grdhi.isna().sum() == 0  # @ see both tab-march-ineq.do & prepmarchcell.do
         assert df.eval("0 <= educomp <= 18").all()
         df.grdcom = df.grdcom.cat.codes + 1  # @ to be consistent with stat
-        df.grdcom = df.grdcom.replace(3, 1) # @ turn 3 to 1 in some years
+        df.grdcom = df.grdcom.replace(3, 1)  # @ turn 3 to 1 in some years
         assert df.eval("1 <= grdcom <= 2").all()
         df = df.eval("""
                 ed8 = educomp<=8
@@ -508,13 +510,9 @@ def predict_archwg_regs_exp(year):
     marchwk_ed_exp_f = res.predict(X_cf)  # @ marchwk-`ed'-exp`exp'-f
 
     # Compile all male/female predicted weekly wages
-    pwkwageskm = s.assign(plnwkw_m=marchwk_ed_exp_m, plnwkw_f=marchwk_ed_exp_f)
-
-    # @ label of edcat 1 "Hsd" 2 "Hsg" 3 "Smc" 4 "Clg" 5 "Gtc"
-    pwkwageskm = pwkwageskm.eval("edcat = edhsd + 2*edhsg + 3*edsmc + 4*edclg + 5*edgtc")
-    assert pwkwageskm.eval("1 <= edcat <= 5").all()
-
-    pwkwageskm = pwkwageskm.filter(["plnwkw_m", "plnwkw_f", "edcat", "exp1"])  # @ gdp
+    pwkwageskm_m = s.assign(plnwkw=marchwk_ed_exp_m, female=0)
+    pwkwageskm_f = s.assign(plnwkw=marchwk_ed_exp_f, female=1)
+    pwkwageskm = pd.concat([pwkwageskm_m, pwkwageskm_f], axis=0)
 
     ######################################################################
     # Predict hourly wages --  Using Only Obs With $67/Week Or More
@@ -543,16 +541,25 @@ def predict_archwg_regs_exp(year):
     marchhr_ed_exp_f = res.predict(X_cf)  # @ marchhr-`ed'-exp`exp'-f
 
     # @ data : Predicted wk & hr wages, March `1'
-    predwg = pwkwageskm.assign(plnhrw_m=marchhr_ed_exp_m, plnhrw_f=marchhr_ed_exp_f)
+    plnhrw_m = s.assign(plnhrw=marchhr_ed_exp_m, female=0)
+    plnhrw_f = s.assign(plnhrw=marchhr_ed_exp_f, female=1)
+    plnhrw = pd.concat([plnhrw_m, plnhrw_f], axis=0)
+    predwg = pwkwageskm.merge(plnhrw)
+
+    # @ label of edcat 1 "Hsd" 2 "Hsg" 3 "Smc" 4 "Clg" 5 "Gtc"
+    predwg = predwg.eval("edcat = edhsd + 2*edhsg + 3*edsmc + 4*edclg + 5*edgtc")
+    assert predwg.eval("1 <= edcat <= 5").all()
+
+    predwg = predwg.filter(["edcat", "exp1", "female", "plnwkw", "plnhrw"])
 
     # @ gdp : "PCE deflator: 2008 basis"
     gdp = df.gdp.unique()
     assert len(gdp) == 1
     predwg = predwg.assign(gdp=gdp[0])
     # @ year : Earnings year
-    predwg = predwg.assign(year=year-1)  # @ predwg-mar`1'
+    predwg_mar = predwg.assign(year=year-1)  # @ predwg-mar`1'
 
-    return predwg
+    return predwg_mar
 
 
 def predict_archwg_regs_exp_loop():
@@ -580,6 +587,35 @@ def assemb_march_lswts_exp():
     #
     """
 
+    ######################################################################
+    # Consolidate marchcells count data into compatible format
+    # Need counts for college and high school groups
+
+    # @ recall that as the labor supply weights q_lsweight use all sample
+    # @ in original code, here is quite different, actually smaller
+    ######################################################################
+
+    # @ marchcells6308
+    df = prep_supply.assembcellsmarch()
+    df = df.reset_index()[["q_lsweight", "exp", "edcat5", "year", "female"]]
+    df = df.rename(columns={"edcat5": "edcat"})
+
+    # Aggregate to experience categories: 5, 15, 25, 35, 45
+    df = df.assign(
+        expcat=pd.cut(df.exp, bins=range(0, 51, 10),
+                      right=False, labels=range(1, 6)))
+
+    lswt = df.groupby(["expcat", "edcat", "female", "year"])["q_lsweight"].sum().rename("lswt")
+
+    # @ label
+    # @ expcat "1: 0-9(5), 2:10-19(15), 3:20-29(25), 4:30-39(35) 5:40-48(45)"
+    # @ expcat 1 "5" 2 "15" 3 "25" 4 "35" 5 "45"
+    # @ lswt "Summ of hours x weeks x weight"
+
+    march_lswts_exp = lswt.reset_index()  # @ data "March labor supply by grouped experience levels"
+
+    return march_lswts_exp
+
 
 """
 assemb-marchwg-regs-exp.do
@@ -597,7 +633,45 @@ def assemb_marchwg_regs_exp():
      """
     predwg = predict_archwg_regs_exp_loop()
 
-    predwg = predwg.assign(expcat=(predwg.exp1 / 5).astype(int))
+    # Rename and label vars
+    predwg = predwg.rename(columns={"exp1": "expcat"})
+    predwg = predwg.assign(expcat=predwg.expcat.astype("category").cat.codes+1)  # 5=1 15=2 25=3 35=4 45=5
+
+    # Add in March employment shares for 1963 - 2008
+    march_lswts_exp = assemb_march_lswts_exp()
+    df = predwg.merge(march_lswts_exp)
+
+    # Calculate fixed weights
+    t1 = df.groupby(["year"])["lswt"].sum().rename("t1")
+    df = df.merge(t1, left_on="year", right_index=True)
+    df = df.eval("normlswt=lswt/t1")
+    avlswt = df.groupby(["edcat", "female", "expcat"])["normlswt"].mean().rename("avlswt")
+    df = df.merge(avlswt.reset_index(), on=["edcat", "female", "expcat"])
+
+    # @ labels
+    # @ lswt : "Labor supply in cell"
+    # @ normlswt : "Labor supply share in cell/year"
+    # @ avlswt : "Average labor supply share in cell over 1963 - 2008"
+    # @ plnhrw : "Pred ln hr wg"
+    # @ plnwkw : "Pred ln wk wg"
+
+    df = df.eval("""
+            rplnhrw = plnhrw + log(gdp)
+            rplnwkw = plnwkw + log(gdp)
+    """)
+
+    # @ labels
+    # @ rplnhrw "Real pred ln hr wg"
+    # @ rplnwkw "Real pred ln wk wg"
+
+    # @ expcat : 1 "5 years" 2 "15 years" 3 "25 years" 4 "35 years" 5 "45 years"
+    # @ female : "1=F, 0=M"
+    # @ edcat5 : "Education cats (5)"
+
+    pred_marwg_6308 = df.filter(["year", "female", "edcat", "expcat", "rplnwkw", "rplnhrw",
+                                "plnwkw", "plnhrw", "gdp", "avlswt", "normlswt", "lswt"])
+    # @ data "March pred wgs 1963-2008: By Year/gender/ed/experience"
+    return pred_marwg_6308
 
 
 """
@@ -605,11 +679,108 @@ calc-marchwg-byexp.do
 """
 
 
+def calc_marchwg_byexp():
+    """
+    Calculate college/high school wage differentials by gender and experience group
+    We use the regression estimated wage differentials by age/experience/year/gender
+    We weight them together using fixed share weights averaged over all years 1963-2005
+    So, this is akin to our preferred series for overall education differentials but
+    now done by experience only
+
+    D. Autor, 6/11/2004, 9/4/2006, 10/9/2006 (updated to March 2006 data)
+
+    Updated for 2008/9 data - M. Wasserman 10/2009
+    """
+
+    df = assemb_marchwg_regs_exp()
+
+    clghsgwg_march_regseries_exp = pd.DataFrame()
+
+    for i in tqdm(["m", "f", "mf"]):
+        ######################################################################
+        # Calculate weighted wage series
+        ######################################################################
+
+        # Gender exclusions
+        if i == "m":
+            dt = df.query("female==0")
+        elif i == "f":
+            dt = df.query("female==1")
+        else:
+            dt = df.copy()
+
+        # Overall high school
+        v1 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==2)")))
+        v2 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("avlswt*(edcat==2)")))
+        hsgwg = (v1/v2).rename("hsgwg")
+        dt = dt.merge(hsgwg, left_on="year", right_index=True)
+
+        # Overall college-plus
+        v1 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==4 | edcat==5)")))
+        v2 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("avlswt*(edcat==4 | edcat==5)")))
+        clpwg = (v1/v2).rename("clpwg")
+        dt = dt.merge(clpwg, left_on="year", right_index=True)
+
+        # Overall just college
+        v1 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==4)")))
+        v2 = dt.groupby(["year"]).apply(lambda x: sum(x.eval("avlswt*(edcat==4)")))
+        clgwg = (v1/v2).rename("clgwg")
+        dt = dt.merge(clgwg, left_on="year", right_index=True)
+
+        # By experience high school
+        v1 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==2)")))
+        v2 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("avlswt*(edcat==2)")))
+        exphsgwg = (v1/v2).rename("exphsgwg")
+        dt = dt.merge(exphsgwg.reset_index(), on=["year", "expcat"])
+
+        # By experience college-plusc
+        v1 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==4 | edcat==5)")))
+        v2 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("avlswt*(edcat==4 | edcat==5)")))
+        expclpwg = (v1/v2).rename("expclpwg")
+        dt = dt.merge(expclpwg.reset_index(), on=["year", "expcat"])
+
+        # By experience just college
+        v1 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==4)")))
+        v2 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("avlswt*(edcat==4)")))
+        expclgwg = (v1/v2).rename("expclgwg")
+        dt = dt.merge(expclgwg.reset_index(), on=["year", "expcat"])
+
+        dt = dt.eval("""
+                clphsg_all = clpwg - hsgwg
+                clghsg_all = clgwg - hsgwg
+
+                clphsg_exp = expclpwg - exphsgwg
+                clghsg_exp = expclgwg - exphsgwg
+        """)
+
+        # @ label
+        # @ clphsg_all : "COLLEGE-PLUS/HSG all"
+        # @ clghsg_all : "COLLEGE-GRAD/HSG all"
+        # @ clphsg_exp : "COLLEGE-PLUS/HSG by experience"
+        # @ clghsg_exp : "COLLEGE-GRAD/HSG by experience"
+
+        # Organize/save
+        col = dt.columns[dt.columns.str.startswith(("year", "expcat", "clphsg_", "clghsg_"))]
+        dt = dt.drop_duplicates(["year", "expcat"]).filter(col)
+
+        if i != "mf":
+            dt = dt.rename(columns=lambda x: x+"_"+i if x[:2] == "cl" else x)
+
+        if i == "m":
+            clghsgwg_march_regseries_exp = dt
+        else:
+            clghsgwg_march_regseries_exp = clghsgwg_march_regseries_exp.merge(dt)
+        # data "March CLG/HSG wage series overall and by experience and gender using Handbook approach, average March wts 1963-2008"
+
+    return clghsgwg_march_regseries_exp
+
+
 def main():
     # tabulate_march_inequality(1997)
-    print(tabulate_march_inequality_loop())
+    # print(tabulate_march_inequality_loop())
     # print(predict_archwg_regs_exp_loop())
-    pass
+    # assemb_marchwg_regs_exp()
+    calc_marchwg_byexp()
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ import pandas as pd
 
 from tqdm import tqdm
 
-from prep_wage import tabulate_march_basic
+import prep_wage
 
 
 input_path = "../../ref/origin/March-CPS/cleaned-data/"
@@ -35,7 +35,7 @@ def prepmarchcell(year):
     @
     """
 
-    df = tabulate_march_basic(year)
+    df = prep_wage.tabulate_march_basic(year)
     df = df.rename(columns={"edcat": "edcat5"})
 
     # @ edcat8 label : 1 "0-8" 2 "9" 3 "10" 4 "11" 5 "Hsg" 6 "Smc" 7 "Clg" 8 "Gtc"
