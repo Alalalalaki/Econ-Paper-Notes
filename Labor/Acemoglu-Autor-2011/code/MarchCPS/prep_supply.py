@@ -24,15 +24,19 @@ prepmarchcell.do
 
 def prepmarchcell(year):
     """
-    @
-    original data cleaning code same as prep_wage thus we directly use tabulate_march_basic
+    #@
+    original data cleaning code same as prep_wage thus we directly use `tabulate_march_basic`
     Note
-        - although here no drop exp > 48, given age limit this meets
+        - although here no drop exp > 48, given age limit this satisfies anyway
         - original code selfemp later, we drop at first in tabulate_march_basic
-          (can add back by set if in tabulate_march_basic if necessary)
+          (can add back by set an if function in `tabulate_march_basic` if necessary)
         - both winc and hinc original code drop !ftfy while in prep_wage only prep_wage
     As a result, our results have less sample than the original, but otherwise the results are exactly the same
-    @
+
+    This function calculates, for each ["year", "edcat5", "exp", "female"] cohort, the sum of
+    weighted labor supply for both all sample ("q") and ftfy no outlier sample ("p"), and the average of
+    real log weekly and hourly wage for "p" sample
+    #@
     """
 
     df = prep_wage.tabulate_march_basic(year)
@@ -47,7 +51,9 @@ def prepmarchcell(year):
 
     df = df.eval("ftfy = fulltime*fullyear")
 
-    # Replace earnings and wages as missing if not FTFY or if top/bottom coded.    Note that we don't really have to set these to missing as long as we assign them 0 weights for the p_weights/counts, but we'll just set to missing anyway (this won't affect the quantity collapses because earnings are not collapsed using quantity weights);
+    # Replace earnings and wages as missing if not FTFY or if top/bottom coded.
+    # Note that we don't really have to set these to missing as long as we assign them 0 weights for the p_weights/counts,
+    # but we'll just set to missing anyway (this won't affect the quantity collapses because earnings are not collapsed using quantity weights);
     # df.loc[df.eval("ftfy==0 | bcwkwgkm==1"), "winc_ws"] = np.nan
     # df.loc[df.eval("ftfy==0 | bchrwgkm==1"), "hinc_ws"] = np.nan
     # @ skip this as missing would make calculation vulnerable
@@ -126,6 +132,9 @@ def assembcellsmarch():
     Updated 9/4/2006 to use March 2005 data by D. Autor
     Updated 10/14/2009 to use March 2007/8 data by M. Wasserman
     #
+    #@
+    This function loop all years for `prepmarchcell`
+    #@
     """
 
     marchcells6308 = pd.DataFrame()
@@ -133,7 +142,7 @@ def assembcellsmarch():
         marchcells = prepmarchcell(year=y)
         marchcells6308 = pd.concat([marchcells6308, marchcells], axis=0)
 
-    # @  edcat5 : "Education cats (Five: HSD, HSG, SMC, CLG, GTC)"
+    # @ edcat5 : "Education cats (Five: HSD, HSG, SMC, CLG, GTC)"
     # @ edcat5 : 1 "Hsd" 2 "Hsg" 3 "Smc" 4 "Clg" 5 "Gtc"
     # @ rlnwinc :  "Mean of log real weekly FT earnings, 2008$ (collapse weight is p_weight)"
     # @ rlnhinc :  "Mean of log real FT wage, 2008$ (collapse weight is p_weight)"
@@ -167,6 +176,9 @@ def effunit_supplies_exp_byexp():
     different. In particular
       - for Overall Eff units supply share (@?), the gap is quite small (as using wage and q_* data)
       - for total hours, the gap is somehow large (as using p_* data where original code include all sample)
+
+    This function first calculate mean relative wage for ["edcat", "female", "exp1"] cell, and ...
+    ... (hard to understand, not actually not sure if used in the paper)
     #@
     """
     df = assembcellsmarch()
@@ -182,6 +194,7 @@ def effunit_supplies_exp_byexp():
 
     # Calculate average relative wage by cell over time period
     # Efficiency units translation: Base is HSD Male with 10 years of potential experience in each year
+    # @ actually base is the highest real wage of this group?
     refwage = df.groupby("year").apply(lambda x: x.query(
         "female==0 & edcat==2 & exp1==10").rwinc.max()).rename("refwage")
     df = df.merge(refwage, left_on="year", right_index=True)
@@ -309,6 +322,7 @@ def effunit_supplies_exp_byexp():
 
 
 def main():
+    # print(prepmarchcell(1979))
     effunit_supplies_exp_byexp()
 
 

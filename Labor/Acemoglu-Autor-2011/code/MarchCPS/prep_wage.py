@@ -33,6 +33,8 @@ def tabulate_march_basic(year):
     #@
     This is the part of code in tab-march-ineq.do but also used in predict-marchwg-regs-exp.do
     We combine the comment in two code to make it better documented
+
+    This function simply clean up the sample and create consistent category variables
     #@
     """
 
@@ -139,6 +141,12 @@ def tabulate_march_inequality(year):
     D. Autor, 9/5/2006. Updated for 2005 March
     M. Wasserman, 10/14/2009 Updated for 2007/8 March
     #
+
+    #@
+    This function first further continue the clean precedures in `tabulate_march_basic`,
+    and then calculate the inequality measures, including both raw percentiles and residual percentiles.
+    The regression use sex and interaction of 5 edu with 16 exp.
+    #@
     """
 
     df = tabulate_march_basic(year)
@@ -326,6 +334,8 @@ tab-march-ineq-loop.do
 
 def tabulate_march_inequality_loop():
 
+    #@ This function loop all years for the `tabulate_march_inequality`
+
     # Run calculations
     # Assemble data
     ineq_stat = pd.DataFrame()
@@ -395,6 +405,9 @@ def predict_archwg_regs_exp(year):
     Autor, 10/9/2006: Use March 2006 data
     Wasserman, 10/2009: Use March 2007/8/9
     #
+    #@
+    This function regress wage on 5 edu, 5 exp and some of their interactions, as well as race for each sex and each sample, and then use the coefficients to calculate the predicted wage.
+    #@
     """
     df = tabulate_march_basic(year)
 
@@ -563,6 +576,8 @@ def predict_archwg_regs_exp(year):
 
 
 def predict_archwg_regs_exp_loop():
+
+    #@ This function loops all years for `predict_archwg_regs_exp`
 
     predwg = pd.DataFrame()
     for y in tqdm(range(1964, 2010)):
