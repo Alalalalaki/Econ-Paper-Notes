@@ -1,6 +1,6 @@
 """
 This file replicates the code in march-prep-supply.
-The input is raw-data. The output is cleaned-data.
+The input is cleaned-data. The output is effunits_exp_by_exp_6308 (in fig-01).
 
 # means original comment
 #@ means additional comment

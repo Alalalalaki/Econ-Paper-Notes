@@ -1,6 +1,6 @@
 """
 This file replicates the code in march-prep-wages.
-The input is raw-data. The output is cleaned-data.
+The input is cleaned-data. The output is clghsgwg-march-regseries-exp (in fig-01) and pred-marwg-6308 (in fig-04).
 
 # means original comment
 # @ means additional comment
@@ -10,13 +10,12 @@ import numpy as np
 import pandas as pd
 from statsmodels.stats.weightstats import DescrStatsW
 import statsmodels.api as sm
-from patsy import dmatrices
+from patsy.highlevel import dmatrices
 
+from pathlib import Path
 from tqdm import tqdm
 
 import prep_supply
-
-input_path = "../../ref/origin/March-CPS/cleaned-data/"
 
 
 """
@@ -37,7 +36,9 @@ def tabulate_march_basic(year):
     This function simply clean up the sample and create consistent category variables
     #@
     """
-
+    input_path = "../../ref/origin/March-CPS/cleaned-data/"
+    if Path.cwd().stem == "notebooks":
+        input_path = input_path[3:]  # adjust path for notebook import
     df = pd.read_stata(input_path+"mar"+str(year)[-2:]+".dta")
 
     # Only keep earnings sample ages 16-64
@@ -334,16 +335,16 @@ tab-march-ineq-loop.do
 
 def tabulate_march_inequality_loop():
 
-    #@ This function loop all years for the `tabulate_march_inequality`
+    # @ This function loop all years for the `tabulate_march_inequality`
 
     # Run calculations
     # Assemble data
     ineq_stat = pd.DataFrame()
-    # ineq_pct = pd.DataFrame()
+    ineq_pct = pd.DataFrame()
     for y in tqdm(range(1964, 2010)):
         df_stat, tot_pct = tabulate_march_inequality(year=y)
         ineq_stat = pd.concat([ineq_stat, df_stat], axis=0, ignore_index=True)
-        # ineq_pct = pd.concat([ineq_pct, tot_pct], axis=0, ignore_index=True)
+        ineq_pct = pd.concat([ineq_pct, tot_pct], axis=0, ignore_index=True)
 
     # Generate 90/50 and 50/10 and 90/10, etc etc
     # @ skip this as the percentile gap can be easily obtained by column calculation
@@ -364,13 +365,14 @@ def tabulate_march_inequality_loop():
 
     # march-ineq-data-1963-2008
     ineq_stat.year = ineq_stat.year - 1
+    ineq_pct.year = ineq_pct.year - 1
 
     # @ keep tot_ft_mf percentiles and year, reshape into long data (year x quantile), generate gender dummy "mf"
     # @ save as data_mf
     # @ do the same for tot_ft_m and tot_ft_f, combine these 3 data, save as march-ftfy-quantile-plot-data
     # @ skip this as can be easily down from our tidy data
 
-    return ineq_stat
+    return ineq_stat, ineq_pct
 
 
 """
@@ -406,7 +408,8 @@ def predict_archwg_regs_exp(year):
     Wasserman, 10/2009: Use March 2007/8/9
     #
     #@
-    This function regress wage on 5 edu, 5 exp and some of their interactions, as well as race for each sex and each sample, and then use the coefficients to calculate the predicted wage.
+    This function regress wage on 5 edu, 5 exp and some of their interactions, as well as race
+    for each sex and each sample, and then use the coefficients to calculate the predicted wage.
     #@
     """
     df = tabulate_march_basic(year)
@@ -577,7 +580,7 @@ def predict_archwg_regs_exp(year):
 
 def predict_archwg_regs_exp_loop():
 
-    #@ This function loops all years for `predict_archwg_regs_exp`
+    # @ This function loops all years for `predict_archwg_regs_exp`
 
     predwg = pd.DataFrame()
     for y in tqdm(range(1964, 2010)):
@@ -694,7 +697,7 @@ calc-marchwg-byexp.do
 """
 
 
-def calc_marchwg_byexp():
+def calc_marchwg_byexp(pred_marwg_6308):
     """
     Calculate college/high school wage differentials by gender and experience group
     We use the regression estimated wage differentials by age/experience/year/gender
@@ -707,7 +710,7 @@ def calc_marchwg_byexp():
     Updated for 2008/9 data - M. Wasserman 10/2009
     """
 
-    df = assemb_marchwg_regs_exp()
+    df = pred_marwg_6308
 
     clghsgwg_march_regseries_exp = pd.DataFrame()
 
@@ -748,7 +751,7 @@ def calc_marchwg_byexp():
         exphsgwg = (v1/v2).rename("exphsgwg")
         dt = dt.merge(exphsgwg.reset_index(), on=["year", "expcat"])
 
-        # By experience college-plusc
+        # By experience college-plus
         v1 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("rplnwkw*avlswt*(edcat==4 | edcat==5)")))
         v2 = dt.groupby(["year", "expcat"]).apply(lambda x: sum(x.eval("avlswt*(edcat==4 | edcat==5)")))
         expclpwg = (v1/v2).rename("expclpwg")
@@ -793,9 +796,9 @@ def calc_marchwg_byexp():
 def main():
     # tabulate_march_inequality(1997)
     # print(tabulate_march_inequality_loop())
-    # print(predict_archwg_regs_exp_loop())
-    # assemb_marchwg_regs_exp()
-    calc_marchwg_byexp()
+    # # print(predict_archwg_regs_exp_loop())
+    pred_marwg_6308 = assemb_marchwg_regs_exp()
+    calc_marchwg_byexp(pred_marwg_6308)
 
 
 if __name__ == "__main__":
