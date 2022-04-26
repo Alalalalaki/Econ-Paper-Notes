@@ -1,27 +1,19 @@
 # Econ-Model-Notes
 
----
-
 ## Macro
 
-- Solow.
-- Hopenhayn 1992. (partial equilibrium)
-- İmrohoroğlu, et al. 2006. The Japanese Saving Rate. (Hayashi & Prescott tyle)
-- İmrohoroğlu, 1989, JPE.
-- Restuccia & Rogerson 2008.
+- Solow model.
+- Hopenhayn (1992). Ecta. (partial equilibrium)
+- Imrohoroğlu (1989). JPE.
+- Chen, İmrohoroğlu, & İmrohoroğlu. (2006). AER. (Hayashi & Prescott 2002 style shooting)
+- Restuccia & Rogerson. (2008). RES.
+- Sedláček & Sterk. (2017). AER.
 
-#### TO-DO
+## Labor
 
-- rewrite Hopenhayn model and add adjustment cost
-- ~~rewrite code in Japanese Saving Rate~~
-
----
+- Acemoglu & Auto. (2011). Handbook.
 
 ## IO
 
-- 
+- LP & ACF.
 
-#### TO-DO
-
-- a simplified version of BLP
-- OP/LP/ACF
